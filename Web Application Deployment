@@ -5,7 +5,7 @@ import time
 # AWS credentials
 AWS_ACCESS_KEY = '' #removing for GitHub
 AWS_SECRET_KEY = '' #removing for GitHub
-REGION_NAME = 'US East (N. Virginia)'
+REGION_NAME = 'us-east-1'
 
 # Initialize the S3 and EC2 clients
 s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=REGION_NAME)

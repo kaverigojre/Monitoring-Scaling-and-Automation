@@ -1,0 +1,55 @@
+import boto3
+
+# AWS credentials
+AWS_ACCESS_KEY = '' #removing for GitHub
+AWS_SECRET_KEY = '' #removing for GitHub
+REGION_NAME = 'us-east-1'
+
+
+# Initialize the Auto Scaling client
+autoscaling_client = boto3.client('autoscaling', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=REGION_NAME)
+
+# Auto Scaling Group parameters
+asg_name = 'Kaveri_asg'
+instance_id = ''  # not specifying for public repo
+min_size = 1
+max_size = 5
+desired_capacity = 2
+subnet_ids = ['subnet-070f6751946cf9645', 'subnet-0b76bb3cd3aeda4e7']  
+security_group_id = 'sg-0abab4dbdd37272c9'  
+
+# Create Auto Scaling Group
+response = autoscaling_client.create_auto_scaling_group(
+    AutoScalingGroupName=asg_name,
+    LaunchTemplate={
+        'LaunchTemplateName': 'AsG_template',  
+        'Version': '$Latest',
+    },
+    MinSize=min_size,
+    MaxSize=max_size,
+    DesiredCapacity=desired_capacity,
+    VPCZoneIdentifier=','.join(subnet_ids),
+    Tags=[
+        {
+            'Key': 'Name',
+            'Value': asg_name
+        },
+    ]
+)
+
+# Configure scaling policies based on CPU utilization
+response = autoscaling_client.put_scaling_policy(
+    AutoScalingGroupName=asg_name,
+    PolicyName='CPUUtilizationScalingPolicy',
+    PolicyType='TargetTrackingScaling',
+    TargetTrackingConfiguration={
+        'PredefinedMetricSpecification': {
+            'PredefinedMetricType': 'ASGAverageCPUUtilization',
+        },
+        'TargetValue': 60,  # Target CPU utilization percentage
+        'ScaleInCooldown': 60,  # Cooldown period for scaling in (in seconds)
+        'ScaleOutCooldown': 60,  # Cooldown period for scaling out (in seconds)
+    }
+)
+
+print(f'Auto Scaling Group "{asg_name}" created successfully with scaling policies based on CPU utilization.')

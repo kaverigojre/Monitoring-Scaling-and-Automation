@@ -1,0 +1,78 @@
+import boto3
+
+# AWS credentials
+AWS_ACCESS_KEY = '' #removing for GitHub
+AWS_SECRET_KEY = '' #removing for GitHub
+REGION_NAME = 'us-east-1'
+
+# Initialize the necessary clients
+elb_client = boto3.client('elbv2', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=REGION_NAME)
+s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=REGION_NAME)
+lambda_client = boto3.client('lambda', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=REGION_NAME)
+sns_client = boto3.client('sns', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=REGION_NAME)
+
+# S3 bucket name for storing ALB access logs
+bucket_name = 'Kaveri_bucket'
+
+# ALB ARN
+alb_arn = 'kaveri_alb'
+
+# Enable access logs for ALB
+response = elb_client.modify_load_balancer_attributes(
+    LoadBalancerArn=alb_arn,
+    Attributes=[
+        {
+            'Key': 'access_logs.s3.enabled',
+            'Value': 'true'
+        },
+        {
+            'Key': 'access_logs.s3.bucket',
+            'Value': bucket_name
+        },
+        {
+            'Key': 'access_logs.s3.prefix',
+            'Value': 'alb-access-logs/'
+        }
+    ]
+)
+
+print(f'Access logging enabled for ALB and configured to send logs to S3 bucket: {bucket_name}')
+
+# Lambda function code for log analysis
+lambda_code = """
+import boto3
+
+def lambda_handler(event, context):
+    s3_client = boto3.client('s3')
+    sns_client = boto3.client('sns')
+
+    # Extract bucket and key from the event
+    bucket = event['Records'][0]['s3']['bucket']['name']
+    key = event['Records'][0]['s3']['object']['key']
+
+    # Read log file from S3
+    response = s3_client.get_object(Bucket=bucket, Key=key)
+    log_data = response['Body'].read().decode('utf-8')
+
+    # Analyze log data for suspicious activities or high traffic
+   
+
+    # If predefined criteria are met, send a notification via SNS
+    sns_client.publish(
+        TopicArn='Kaveri_sns_topic_arn',  
+        Subject='ALB Log Analysis Alert',
+        Message='Potential suspicious activity detected in ALB access logs.'
+    )
+"""
+
+# Create Lambda function
+response = lambda_client.create_function(
+    FunctionName='ALBLogAnalysisFunction',
+    Runtime='python3.8',
+    Role='arn:aws:iam::your_account_id:role/AWSLambdaBasicExecutionRole',  
+    Handler='lambda_function.lambda_handler',
+    Code={'ZipFile': lambda_code.encode()},
+    Timeout=30
+)
+
+print('Lambda function for log analysis created successfully.')

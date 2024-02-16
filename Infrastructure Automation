@@ -1,0 +1,114 @@
+import boto3
+import time
+
+# AWS credentials
+AWS_ACCESS_KEY = '' #removing for GitHub
+AWS_SECRET_KEY = '' #removing for GitHub
+REGION_NAME = 'us-east-1'
+
+
+# Initialize the necessary clients
+ec2_client = boto3.client('ec2', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=REGION_NAME)
+elb_client = boto3.client('elbv2', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=REGION_NAME)
+
+# Parameters for the infrastructure
+key_name = '' #not mentioning for public GIT hub repo
+security_group_name = 'web_sg'
+instance_type = 't2.micro'
+ami_id = 'ami-0e13fb78f793e43a4'
+subnet_id = 'subnet-070f6751946cf9645'
+alb_name = 'Kaveri_alb'
+target_group_name = 'sg-0abab4dbdd37272c9'
+listener_port = 80
+listener_protocol = 'HTTP'
+
+# Function to deploy the infrastructure
+def deploy_infrastructure():
+    # Create security group
+    response = ec2_client.create_security_group(
+        Description='Security group for web server',
+        GroupName=security_group_name
+    )
+    security_group_id = response['GroupId']
+
+    # Authorize inbound traffic
+    ec2_client.authorize_security_group_ingress(
+        GroupId=security_group_id,
+        IpPermissions=[
+            {
+                'IpProtocol': 'tcp',
+                'FromPort': 80,
+                'ToPort': 80,
+                'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
+            },
+        ]
+    )
+
+    # Launch EC2 instance
+    response = ec2_client.run_instances(
+        ImageId=ami_id,
+        InstanceType=instance_type,
+        KeyName=key_name,
+        SecurityGroups=[security_group_name],
+        SubnetId=subnet_id,
+        MinCount=1,
+        MaxCount=1
+    )
+    instance_id = response['Instances'][0]['InstanceId']
+
+    # Create ALB
+    response = elb_client.create_load_balancer(
+        Name=alb_name,
+        Subnets=[subnet_id],
+        SecurityGroups=[security_group_id]
+    )
+    alb_arn = response['LoadBalancers'][0]['LoadBalancerArn']
+
+    # Create target group
+    response = elb_client.create_target_group(
+        Name=target_group_name,
+        Protocol='HTTP',
+        Port=listener_port,
+        VpcId=subnet_id
+    )
+    target_group_arn = response['TargetGroups'][0]['TargetGroupArn']
+
+    # Create listener
+    response = elb_client.create_listener(
+        LoadBalancerArn=alb_arn,
+        Protocol=listener_protocol,
+        Port=listener_port,
+        DefaultActions=[{'Type': 'forward', 'TargetGroupArn': target_group_arn}]
+    )
+
+    print('Infrastructure deployed successfully.')
+    return instance_id, alb_arn, target_group_arn
+
+# Function to update the infrastructure
+def update_infrastructure():
+    # Implement update logic here
+    print('Infrastructure updated successfully.')
+
+# Function to tear down the infrastructure
+def teardown_infrastructure(instance_id, alb_arn, target_group_arn):
+    # Delete resources
+    ec2_client.terminate_instances(InstanceIds=[instance_id])
+    elb_client.delete_load_balancer(LoadBalancerArn=alb_arn)
+    elb_client.delete_target_group(TargetGroupArn=target_group_arn)
+    
+    # Delete security group
+    security_group_id = ec2_client.describe_security_groups(GroupNames=[security_group_name])['SecurityGroups'][0]['GroupId']
+    ec2_client.delete_security_group(GroupId=security_group_id)
+    
+    print('Infrastructure torn down successfully.')
+
+# Main function
+def main():
+    instance_id, alb_arn, target_group_arn = deploy_infrastructure()
+    time.sleep(60)  # Wait for infrastructure to be fully deployed before updating
+    update_infrastructure()
+    time.sleep(60)  # Wait for update to complete before tearing down
+    teardown_infrastructure(instance_id, alb_arn, target_group_arn)
+
+if __name__ == '__main__':
+    main()

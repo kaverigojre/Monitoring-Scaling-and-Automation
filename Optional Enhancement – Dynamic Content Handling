@@ -1,0 +1,38 @@
+import boto3
+import os
+import shutil
+
+# AWS credentials
+AWS_ACCESS_KEY = '' #removing for GitHub
+AWS_SECRET_KEY = '' #removing for GitHub
+REGION_NAME = 'us-east-1'
+
+# Initialize the necessary clients
+s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=REGION_NAME)
+
+# Function to move files from EC2 to S3
+def move_files_to_s3():
+
+    local_upload_dir = '/usr/share/nginx/html/uploads'
+    
+    # Replace 'your_s3_bucket_name' with the name of your S3 bucket
+    s3_bucket_name = 'Kaveri_s3_bucket'
+
+    # Iterate over files in the local upload directory
+    for filename in os.listdir(local_upload_dir):
+        # Upload file to S3
+        s3_client.upload_file(os.path.join(local_upload_dir, filename), s3_bucket_name, filename)
+
+
+        # Remove the file from the local upload directory
+        os.remove(os.path.join(local_upload_dir, filename))
+
+    print('Files moved to S3 successfully.')
+
+# Main function
+def main():
+    # Call the function to move files from EC2 to S3
+    move_files_to_s3()
+
+if __name__ == '__main__':
+    main()

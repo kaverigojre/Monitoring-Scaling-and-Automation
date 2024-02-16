@@ -1,0 +1,70 @@
+import boto3
+
+# AWS credentials
+AWS_ACCESS_KEY = '' #removing for GitHub
+AWS_SECRET_KEY = '' #removing for GitHub
+REGION_NAME = 'us-east-1'
+
+# Initialize the necessary clients
+lambda_client = boto3.client('lambda', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=REGION_NAME)
+ec2_client = boto3.client('ec2', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=REGION_NAME)
+sns_client = boto3.client('sns', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=REGION_NAME)
+
+# Lambda function parameters
+function_name = 'HealthCheckLambda'
+role_arn = 'arn:aws:iam::your_account_id:role/lambda_execution_role'  # Specify the IAM role ARN for Lambda execution
+timeout = 30  # Timeout in seconds for the Lambda function
+handler = 'lambda_function.lambda_handler'  # Name of the handler function in your Lambda code
+runtime = 'python3.8'  # Runtime environment for the Lambda function
+
+# Lambda function code
+lambda_code = """
+import boto3
+
+def lambda_handler(event, context):
+    # Initialize clients
+    ec2_client = boto3.client('ec2')
+    sns_client = boto3.client('sns')
+
+    # ALB parameters
+    alb_arn = 'Kaveri_alb'  
+    target_group_arn = 'Ubuntu-Instance-LB' 
+
+    # Get targets registered with the target group
+    response = ec2_client.describe_target_health(TargetGroupArn=target_group_arn)
+    unhealthy_targets = [target['Target']['Id'] for target in response['TargetHealthDescriptions'] if target['TargetHealth']['State'] != 'healthy']
+
+    if unhealthy_targets:
+        # Capture a snapshot of the failing instance for debugging purposes
+        for instance_id in unhealthy_targets:
+            response = ec2_client.create_snapshot(
+                Description=f'Snapshot for debugging instance {instance_id}',
+                VolumeId=instance_id
+            )
+            snapshot_id = response['SnapshotId']
+            print(f'Snapshot {snapshot_id} created for instance {instance_id}')
+
+        # Terminating the problematic instance(s), allowing the ASG to replace it
+        for instance_id in unhealthy_targets:
+            response = ec2_client.terminate_instances(InstanceIds=[instance_id])
+            print(f'Instance {instance_id} terminated')
+
+        # Send a notification through SNS to the administrators
+        sns_client.publish(
+            TopicArn='Kaveri_sns',  
+            Subject='Web Application Health Check Failure',
+            Message='The health check failed consistently. Instances terminated and replaced.'
+        )
+"""
+
+# Create Lambda function
+response = lambda_client.create_function(
+    FunctionName=function_name,
+    Runtime=runtime,
+    Role=role_arn,
+    Handler=handler,
+    Code={'ZipFile': lambda_code.encode()},
+    Timeout=timeout
+)
+
+print(f'Lambda function "{function_name}" created successfully.')

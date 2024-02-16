@@ -1,0 +1,47 @@
+import boto3
+
+# AWS credentials
+AWS_ACCESS_KEY = '' #removing for GitHub
+AWS_SECRET_KEY = '' #removing for GitHub
+REGION_NAME = 'us-east-1'
+
+# Initialize the ELB client
+elb_client = boto3.client('elbv2', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=REGION_NAME)
+
+# Localbalancer parameters
+alb_name = 'Kaveri_alb'
+subnet_ids = ['subnet-070f6751946cf9645', 'subnet-0b76bb3cd3aeda4e7']  
+security_group_id = 'sg-0abab4dbdd37272c9'  
+
+# Creating ALB here:
+response = elb_client.create_load_balancer(
+    Name=alb_name,
+    Subnets=subnet_ids,
+    SecurityGroups=[security_group_id],
+    Scheme='internet-facing',  
+    Tags=[
+        {
+            'Key': 'Name',
+            'Value': alb_name
+        },
+    ]
+)
+
+# Extract ALB ARN
+alb_arn = response['LoadBalancers'][0]['LoadBalancerArn']
+
+# Register EC2 instance(s) with ALB
+instance_ids = ['instance_id1', 'instance_id2']  #not mentioning for public GITHUB repo
+
+for instance_id in instance_ids:
+    elb_client.register_targets(
+        TargetGroupArn=alb_arn,
+        Targets=[
+            {
+                'Id': instance_id,
+                'Port': 80,  
+            },
+        ]
+    )
+
+print(f'Application Load Balancer deployed with ARN: {alb_arn}')
