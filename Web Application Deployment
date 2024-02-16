@@ -1,0 +1,69 @@
+import boto3
+import paramiko
+import time
+
+# AWS credentials
+AWS_ACCESS_KEY = '' #removing for GitHub
+AWS_SECRET_KEY = '' #removing for GitHub
+REGION_NAME = 'US East (N. Virginia)'
+
+# Initialize the S3 and EC2 clients
+s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=REGION_NAME)
+ec2_client = boto3.client('ec2', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=REGION_NAME)
+
+# S3 bucket name
+bucket_name = 'Kaveri_bucket1'
+
+# Create S3 bucket
+s3_client.create_bucket(Bucket=bucket_name)
+
+# EC2 instance parameters
+ami_id = 'ami-0c7217cdde317cfec' 
+instance_type = 't2.micro'
+key_name = ''#removing for GitHub
+security_group_id = 'sg-0abab4dbdd37272c9' 
+
+# Launch EC2 instance
+response = ec2_client.run_instances(
+    ImageId=ami_id,
+    InstanceType=instance_type,
+    KeyName=key_name,
+    SecurityGroupIds=[security_group_id],
+    MinCount=1,
+    MaxCount=1
+)
+
+# Extract instance ID
+instance_id = response['Instances'][0]['InstanceId']
+
+# Wait for instance to be in 'running' state
+instance_state = ''
+while instance_state != 'running':
+    response = ec2_client.describe_instances(InstanceIds=[instance_id])
+    instance_state = response['Reservations'][0]['Instances'][0]['State']['Name']
+    time.sleep(5)
+
+# Get instance public IP address
+instance_ip = response['Reservations'][0]['Instances'][0]['PublicIpAddress']
+
+# SSH into the instance and deploy the web application
+ssh_client = paramiko.SSHClient()
+ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+ssh_client.connect(hostname=instance_ip, username='ec2-user', key_filename='your_key.pem')
+
+# Commands to install and configure web server (e.g., Apache)
+commands = [
+    'sudo yum update -y',
+    'sudo yum install httpd -y',
+    'sudo systemctl start httpd',
+    'sudo systemctl enable httpd',
+    # You can add more commands to deploy your web application here
+]
+
+for command in commands:
+    stdin, stdout, stderr = ssh_client.exec_command(command)
+    print(stdout.read().decode())
+
+ssh_client.close()
+
+print(f'Web application deployed at: http://{instance_ip}')
